@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 #
 # Copyright (c) 2016 Matthew Earl
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 #     The above copyright notice and this permission notice shall be included
 #     in all copies or substantial portions of the Software.
-# 
+#
 #     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 #     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 #     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
@@ -137,7 +137,7 @@ def _group_overlapping_rectangles(matches):
                 match_to_group[idx1] = match_to_group[idx2]
                 break
         else:
-            match_to_group[idx1] = num_groups 
+            match_to_group[idx1] = num_groups
             num_groups += 1
 
     groups = collections.defaultdict(list)
@@ -184,10 +184,12 @@ if __name__ == "__main__":
 
     for pt1, pt2, present_prob, letter_probs in post_process(
                                                   detect(im_gray, param_vals)):
-        pt1 = tuple(reversed(map(int, pt1)))
-        pt2 = tuple(reversed(map(int, pt2)))
+
+        pt1 = tuple(reversed(list(map(int, pt1))))
+        pt2 = tuple(reversed(list(map(int, pt2))))
 
         code = letter_probs_to_code(letter_probs)
+        print(code)
 
         color = (0.0, 255.0, 0.0)
         cv2.rectangle(im, pt1, pt2, color)
@@ -195,7 +197,7 @@ if __name__ == "__main__":
         cv2.putText(im,
                     code,
                     pt1,
-                    cv2.FONT_HERSHEY_PLAIN, 
+                    cv2.FONT_HERSHEY_PLAIN,
                     1.5,
                     (0, 0, 0),
                     thickness=5)
@@ -203,7 +205,7 @@ if __name__ == "__main__":
         cv2.putText(im,
                     code,
                     pt1,
-                    cv2.FONT_HERSHEY_PLAIN, 
+                    cv2.FONT_HERSHEY_PLAIN,
                     1.5,
                     (255, 255, 255),
                     thickness=2)

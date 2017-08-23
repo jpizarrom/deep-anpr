@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 #
 # Copyright (c) 2016 Matthew Earl
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 #     The above copyright notice and this permission notice shall be included
 #     in all copies or substantial portions of the Software.
-# 
+#
 #     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 #     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 #     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
@@ -49,6 +49,9 @@ import gen
 import model
 
 
+TEST_DIR = './test'
+
+
 def code_to_vec(p, code):
     def char_to_vec(c):
         y = numpy.zeros((len(common.CHARS),))
@@ -62,9 +65,10 @@ def code_to_vec(p, code):
 
 def read_data(img_glob):
     for fname in sorted(glob.glob(img_glob)):
+        # print(fname)
         im = cv2.imread(fname)[:, :, 0].astype(numpy.float32) / 255.
-        code = fname.split("/")[1][9:16]
-        p = fname.split("/")[1][17] == '1'
+        code = fname.split("/")[-1][9:16]
+        p = fname.split("/")[-1][17] == '1'
         yield im, code_to_vec(p, code)
 
 
@@ -96,7 +100,7 @@ def mpgen(f):
 
     @functools.wraps(f)
     def wrapped(*args, **kwargs):
-        q = multiprocessing.Queue(3) 
+        q = multiprocessing.Queue(3)
         proc = multiprocessing.Process(target=main,
                                        args=(q, args, kwargs))
         proc.start()
@@ -109,7 +113,7 @@ def mpgen(f):
             proc.join()
 
     return wrapped
-        
+
 
 @mpgen
 def read_batches(batch_size):
@@ -126,10 +130,12 @@ def get_loss(y, y_):
     # Calculate the loss from digits being incorrect.  Don't count loss from
     # digits that are in non-present plates.
     digits_loss = tf.nn.softmax_cross_entropy_with_logits(
-                                          tf.reshape(y[:, 1:],
-                                                     [-1, len(common.CHARS)]),
-                                          tf.reshape(y_[:, 1:],
-                                                     [-1, len(common.CHARS)]))
+        logits=tf.reshape(y[:, 1:], [-1, len(common.CHARS)]),
+        labels=tf.reshape(y_[:, 1:], [-1, len(common.CHARS)]))
+                                          # tf.reshape(y[:, 1:],
+                                          #            [-1, len(common.CHARS)]),
+                                          # tf.reshape(y_[:, 1:],
+                                          #            [-1, len(common.CHARS)]))
     digits_loss = tf.reshape(digits_loss, [-1, 7])
     digits_loss = tf.reduce_sum(digits_loss, 1)
     digits_loss *= (y_[:, 0] != 0)
@@ -137,13 +143,16 @@ def get_loss(y, y_):
 
     # Calculate the loss from presence indicator being wrong.
     presence_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                                                          y[:, :1], y_[:, :1])
+        logits=y[:, :1], labels=y_[:, :1])
+                                                          # y[:, :1], y_[:, :1])
     presence_loss = 7 * tf.reduce_sum(presence_loss)
 
     return digits_loss, presence_loss, digits_loss + presence_loss
 
 
-def train(learn_rate, report_steps, batch_size, initial_weights=None):
+def train(
+        learn_rate, report_steps, batch_size, initial_weights=None, limit=None,
+        save_interval=None):
     """
     Train the network.
 
@@ -202,12 +211,11 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
                                               r[3] < 0.5)))
         r_short = (r[0][:190], r[1][:190], r[2][:190], r[3][:190])
         for b, c, pb, pc in zip(*r_short):
-            print "{} {} <-> {} {}".format(vec_to_plate(c), pc,
-                                           vec_to_plate(b), float(pb))
+            print ("{} {} <-> {} {}".format(vec_to_plate(c), pc,
+                                                       vec_to_plate(b), float(pb)))
         num_p_correct = numpy.sum(r[2] == r[3])
 
-        print ("B{:3d} {:2.02f}% {:02.02f}% loss: {} "
-               "(digits: {}, presence: {}) |{}|").format(
+        print ("B{:3d} {:2.02f}% {:02.02f}% loss: {} (digits: {}, presence: {}) |{}|".format(
             batch_idx,
             100. * num_correct / (len(r[0])),
             100. * num_p_correct / len(r[2]),
@@ -215,7 +223,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
             r[4],
             r[5],
             "".join("X "[numpy.array_equal(b, c) or (not pb and not pc)]
-                                           for b, c, pb, pc in zip(*r_short)))
+                                           for b, c, pb, pc in zip(*r_short))))
 
     def do_batch():
         sess.run(train_step,
@@ -229,22 +237,29 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         if initial_weights is not None:
             sess.run(assign_ops)
 
-        test_xs, test_ys = unzip(list(read_data("test/*.png"))[:50])
+        test_xs, test_ys = unzip(list(read_data(TEST_DIR + "/*.png"))[:50])
 
         try:
             last_batch_idx = 0
             last_batch_time = time.time()
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
+                print('batch_idx', batch_idx)
                 do_batch()
                 if batch_idx % report_steps == 0:
                     batch_time = time.time()
                     if last_batch_idx != batch_idx:
-                        print "time for 60 batches {}".format(
+                        print ("time for 60 batches {}".format(
                             60 * (last_batch_time - batch_time) /
-                                            (last_batch_idx - batch_idx))
+                            (last_batch_idx - batch_idx)))
                         last_batch_idx = batch_idx
                         last_batch_time = batch_time
+                if limit and batch_idx >= limit:
+                    raise KeyboardInterrupt
+
+                if save_interval and batch_idx % save_interval == 0:
+                    inter_weights = [p.eval() for p in params]
+                    numpy.savez("weights.{}.npz".format(batch_idx), *inter_weights)
 
         except KeyboardInterrupt:
             last_weights = [p.eval() for p in params]
@@ -253,8 +268,19 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        f = numpy.load(sys.argv[1])
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--initial-weights-file", default=None, help="")
+    parser.add_argument("--limit", type=int, default=None, help="")
+    parser.add_argument("--save-interval", type=int, default=None, help="")
+    args = parser.parse_args()
+
+    initial_weights_file = args.initial_weights_file
+    limit = args.limit
+    save_interval = args.save_interval
+
+    if initial_weights_file is not None:
+        f = numpy.load(initial_weights_file)
         initial_weights = [f[n] for n in sorted(f.files,
                                                 key=lambda s: int(s[4:]))]
     else:
@@ -263,5 +289,6 @@ if __name__ == "__main__":
     train(learn_rate=0.001,
           report_steps=20,
           batch_size=50,
-          initial_weights=initial_weights)
-
+          initial_weights=initial_weights,
+          limit=limit,
+          save_interval=save_interval)
